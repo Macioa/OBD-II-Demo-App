@@ -50,8 +50,13 @@ type Native = {
   shareExports(id: string, files: Record<string, string>): Promise<number>;
 };
 
-/** Raw session text for replay (imu holds only a/r rows). */
-export type RecordingFiles = { meta: string; gps: string; imu: string };
+/** Raw session text for replay (imu holds only a/r rows, events only OBD speed). */
+export type RecordingFiles = {
+  meta: string;
+  gps: string;
+  imu: string;
+  events?: string;
+};
 
 const native = NativeModules.ImuSensors as Native | undefined;
 const emitter = native

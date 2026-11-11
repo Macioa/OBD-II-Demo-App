@@ -10,7 +10,10 @@ import {
   View,
 } from 'react-native';
 import { dlog, dlogError } from '../../debugLog';
+import { parseObdSpeeds } from '../estimate/wheel';
 import {
+  ENGINES,
+  EngineId,
   GpsFix,
   Replay,
   frameAt,
@@ -35,6 +38,7 @@ export const clock = (s: number) =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const m = (x: number | null) => (x == null ? '—' : `${x.toFixed(1)} m`);
 const SPEEDS = [1, 8, 32] as const;
+const pad = (x: number | null) => (x == null ? '—' : x.toFixed(0)).padStart(7);
 const TICK_MS = 100;
 
 /** M4: saved sessions list → replay with map, scrubber, stats and export. */
@@ -112,6 +116,7 @@ function SessionDetail({
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(8);
   const [barW, setBarW] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [engine, setEngine] = useState<EngineId>('pdr');
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -120,7 +125,12 @@ function SessionDetail({
     loadRecording(info.id)
       .then(f => {
         const fixes = parseGps(f.gps);
-        const r = replay(fixes, parseImu(f.imu));
+        const r = replay(
+          fixes,
+          parseImu(f.imu),
+          {},
+          parseObdSpeeds(f.events ?? ''),
+        );
         let meta: { startedAt?: string } = {};
         try {
           meta = JSON.parse(f.meta);
@@ -128,10 +138,14 @@ function SessionDetail({
         dlog(
           `sessions: replayed ${info.id} in ${Date.now() - started} ms steps=${
             r.steps
-          } fixes=${fixes.length} maxErr=${r.stats.max?.toFixed(1)}`,
+          } fixes=${fixes.length} obd=${r.obdSpeeds} ${r.engines
+            .map(x => `${x.id}Max=${x.stats.max?.toFixed(1)}`)
+            .join(' ')}`,
         );
         if (live) {
           setData({ r, fixes, startedAt: meta.startedAt });
+          // A drive with OBD speed: the wheel estimate is the one to look at.
+          setEngine(r.obdSpeeds ? 'wheel' : 'pdr');
           setT(r.tEnd);
         }
       })
@@ -180,7 +194,7 @@ function SessionDetail({
         );
       }
       if (kind !== 'gpx') {
-        files[`${info.id}-error.csv`] = toCsv(data.r);
+        files[`${info.id}-${engine}-error.csv`] = toCsv(data.r, engine);
       }
       await shareExports(info.id, files);
       dlog(`sessions: exported ${Object.keys(files).join(', ')}`);
@@ -233,7 +247,8 @@ function SessionDetail({
 
   const { r } = data;
   const span = Math.max(r.tEnd - r.t0, 1e-6);
-  const f = frameAt(r, t);
+  const f = frameAt(r, t, engine);
+  const main = r.engines.find(x => x.id === engine) ?? r.engines[0];
   const frac = Math.min(1, Math.max(0, (t - r.t0) / span));
 
   return (
@@ -249,6 +264,8 @@ function SessionDetail({
             cur={f.cur}
             focus={f.focus}
             showGps
+            others={f.others}
+            estColor={ENGINES[main.id].color}
           />
         ) : (
           <Text style={s.dim}>No GPS fix in this session: nothing to map.</Text>
@@ -291,16 +308,43 @@ function SessionDetail({
             <Text style={speed === x ? s.chipOnTxt : undefined}>{x}×</Text>
           </Pressable>
         ))}
-        <Text style={[s.mono, s.grow]}>  err now {m(f.err)}</Text>
+        <Text style={[s.mono, s.grow]}> err now {m(f.err)}</Text>
       </View>
 
+      <View style={s.row}>
+        {r.engines.map(x => (
+          <Pressable
+            key={x.id}
+            testID={`engine-${x.id}`}
+            style={[s.chip, engine === x.id && s.chipOn]}
+            onPress={() => setEngine(x.id)}
+          >
+            <Text
+              style={
+                engine === x.id ? s.chipOnTxt : { color: ENGINES[x.id].color }
+              }
+            >
+              ● {ENGINES[x.id].label}
+            </Text>
+          </Pressable>
+        ))}
+        {!r.obdSpeeds && <Text style={s.dim}>no OBD speed → no wheel</Text>}
+      </View>
       <Text style={s.mono} testID="replay-stats">
-        DIST EST {r.estDist.toFixed(0)} m │ GPS {r.gpsDist.toFixed(0)} m
-        {'\n'}STEPS {r.steps} │ FIXES {data.fixes.length}
-        {'\n'}FINAL ERR {m(r.stats.cur)} │ MAX {m(r.stats.max)} │ MEAN{' '}
-        {m(r.stats.mean)}
-        {'\n'}ERR/DIST{' '}
-        {r.errPerDist == null ? '—' : `${(r.errPerDist * 100).toFixed(1)} %`}
+        {'       DIST   FINAL    MAX   MEAN  ERR/D'}
+        {r.engines.map(
+          x =>
+            `\n${ENGINES[x.id].label.padEnd(5)}${pad(x.dist)}${pad(
+              x.stats.cur,
+            )}${pad(x.stats.max)}${pad(x.stats.mean)}${
+              x.errPerDist == null
+                ? '      —'
+                : `${(x.errPerDist * 100).toFixed(1)}%`.padStart(7)
+            }`,
+        )}
+        {`\nGPS${pad(r.gpsDist)}  │ STEPS ${r.steps} │ FIXES ${
+          data.fixes.length
+        } │ OBD ${r.obdSpeeds}`}
       </Text>
 
       <View style={s.row}>

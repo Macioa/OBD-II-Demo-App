@@ -111,7 +111,7 @@ test('tab switches keep sensors, recording and PDR running', async () => {
   expect(native.startRecording).toHaveBeenCalledTimes(1);
 
   await act(async () => press(r, /^track$/));
-  await act(async () => press(r, /start pdr/));
+  await act(async () => press(r, /^▶ start$/));
   await act(async () => emitSecond());
   const steps = () => Number(/STEPS (\d+)/.exec(texts(r))![1]);
   const before = steps();

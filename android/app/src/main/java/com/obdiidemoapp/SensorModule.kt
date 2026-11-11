@@ -287,7 +287,7 @@ class SensorModule(private val ctx: ReactApplicationContext) :
   }
 
   /**
-   * M4 replay: reads a finished session for JS. Resolves {meta, gps, imu} as
+   * M4 replay: reads a finished session for JS. Resolves {meta, gps, imu, events} as
    * text; imu keeps only accel (a) and rotation (r) rows from every chunk,
    * which is all the estimators need, to halve what crosses the bridge.
    */
@@ -311,6 +311,9 @@ class SensorModule(private val ctx: ReactApplicationContext) :
           putString("meta", read("meta.json"))
           putString("gps", read("gps.csv"))
           putString("imu", imu.toString())
+          // M5: OBD speed lines only, for the wheel-speed engine.
+          putString("events", File(dir, "events.log").takeIf { it.exists() }
+            ?.useLines { ls -> ls.filter { "obd kmh=" in it || "CMD 010D" in it }.joinToString("\n") } ?: "")
         })
       } catch (e: Throwable) {
         promise.reject("LOAD_FAILED", e.message, e)

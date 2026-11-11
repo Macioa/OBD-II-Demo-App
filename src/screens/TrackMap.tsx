@@ -35,6 +35,9 @@ type Props = {
   /** Point the map keeps on screen (latest GPS, or the estimate). */
   focus: EN;
   showGps: boolean;
+  /** M5 comparison overlay: other engines' paths, drawn thin. */
+  others?: { id: string; color: string; pts: EN[] }[];
+  estColor?: string;
 };
 
 /** M3: estimate + GPS paths and per-second error connectors on a map. */
@@ -46,6 +49,8 @@ export default function TrackMap({
   cur,
   focus,
   showGps,
+  others = [],
+  estColor = '#d84315',
 }: Props) {
   const cam = useRef<CameraRef>(null);
   const view = useRef<[number, number, number, number] | null>(null);
@@ -166,12 +171,25 @@ export default function TrackMap({
             paint={{ 'line-color': '#1565c0', 'line-width': 4 }}
           />
         </GeoJSONSource>
+        {others.map(o => (
+          <GeoJSONSource
+            key={o.id}
+            id={`other-${o.id}`}
+            data={toGeoJson(origin, o.pts, [], []).est}
+          >
+            <Layer
+              type="line"
+              id={`other-${o.id}-line`}
+              paint={{ 'line-color': o.color, 'line-width': 2 }}
+            />
+          </GeoJSONSource>
+        ))}
         <GeoJSONSource id="est" data={geo.est}>
           <Layer
             type="line"
             id="est-line"
             paint={{
-              'line-color': '#d84315',
+              'line-color': estColor,
               'line-width': 3,
               'line-dasharray': [2, 1],
             }}
@@ -184,7 +202,7 @@ export default function TrackMap({
             paint={{
               'circle-radius': 6,
               'circle-color': '#fff',
-              'circle-stroke-color': '#d84315',
+              'circle-stroke-color': estColor,
               'circle-stroke-width': 3,
             }}
           />

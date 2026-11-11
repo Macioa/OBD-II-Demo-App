@@ -278,6 +278,15 @@ function setLive(f: (l: ObdLive) => ObdLive) {
 }
 
 export const getObd = () => state;
+
+/** M5: each vehicle-speed reading (km/h) as it arrives, for the wheel engine. */
+const speedListeners = new Set<(kmh: number) => void>();
+export function onObdSpeed(cb: (kmh: number) => void) {
+  speedListeners.add(cb);
+  return () => {
+    speedListeners.delete(cb);
+  };
+}
 export function subscribeObd(cb: () => void) {
   listeners.add(cb);
   return () => {
@@ -509,6 +518,7 @@ async function connectAndRead(reconnect: boolean, onCycle: () => void) {
         } else if (p === '0D' && b.length) {
           setLive(l => ({ ...l, kmh: b[0] }));
           logEvent(`obd kmh=${b[0]}`);
+          speedListeners.forEach(cb => cb(b[0]));
         } else if (p === '05' && b.length) {
           setLive(l => ({ ...l, coolant: b[0] - 40 }));
         }

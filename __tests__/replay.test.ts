@@ -12,6 +12,7 @@ import {
   toCsv,
   toGpx,
 } from '../src/session/replay';
+import { parseObdSpeeds } from '../src/estimate/wheel';
 
 const G = 9.80665;
 
@@ -94,7 +95,7 @@ test('GPX has both tracks with times; CSV one row per second', () => {
   const gpx = toGpx(r, 'walk <1>', fixes, Date.parse('2026-11-11T00:00:00Z'));
   expect(gpx).toMatch(/^<\?xml/);
   expect(gpx).toContain('<name>walk &lt;1&gt;</name>');
-  expect(gpx.match(/<trk>/g)).toHaveLength(2);
+  expect(gpx.match(/<trk>/g)).toHaveLength(3); // GPS, PDR, INS
   const segs = gpx.split('<trk>').slice(1);
   expect(segs[0].match(/<trkpt/g)).toHaveLength(fixes.length);
   expect(segs[1].match(/<trkpt/g)).toHaveLength(r.est.length);
@@ -140,7 +141,9 @@ describe.each(recordings)('replay %s', name => {
 
   test('replays, exports and covers the whole session', () => {
     const started = Date.now();
-    const r = replay(fixes, parseImu(imuText));
+    const events = fs.readFileSync(path.join(dir, 'events.log'), 'utf8');
+    const speeds = parseObdSpeeds(events);
+    const r = replay(fixes, parseImu(imuText), {}, speeds);
     const ms = Date.now() - started;
     console.log(name, {
       ms,
@@ -148,16 +151,27 @@ describe.each(recordings)('replay %s', name => {
       fixes: fixes.length,
       finalErr: r.stats.cur?.toFixed(1),
       maxErr: r.stats.max?.toFixed(1),
+      engines: r.engines.map(
+        x =>
+          `${x.id} mean=${x.stats.mean?.toFixed(0)} dist=${x.dist.toFixed(0)}`,
+      ),
     });
     expect(r.origin).not.toBeNull();
     expect(r.gps).toHaveLength(meta.rows.gps);
     expect(r.tEnd).toBeGreaterThan(meta.durationS - 2);
     expect(r.stats.series.length).toBeGreaterThan(meta.durationS - 5);
     const gpx = toGpx(r, name, fixes, startMs(meta.startedAt));
-    expect(gpx.match(/<trkpt/g)!.length).toBe(fixes.length + r.est.length);
-    expect(gpx).toContain(`<time>${meta.startedAt.slice(0, 10)}`);
-    expect(toCsv(r).trim().split('\n')).toHaveLength(
-      1 + r.stats.series.length,
+    expect(gpx.match(/<trkpt/g)!.length).toBe(
+      fixes.length + r.engines.reduce((n, x) => n + x.est.length, 0),
     );
+    if (speeds.length) {
+      // M5: OBD speed integrates to roughly the GPS distance.
+      const wheel = r.engines.find(x => x.id === 'wheel')!;
+      expect(wheel.dist / r.gpsDist).toBeGreaterThan(0.7);
+      expect(wheel.dist / r.gpsDist).toBeLessThan(1.2);
+      expect(wheel.est.length).toBeGreaterThan(meta.durationS * 5);
+    }
+    expect(gpx).toContain(`<time>${meta.startedAt.slice(0, 10)}`);
+    expect(toCsv(r).trim().split('\n')).toHaveLength(1 + r.stats.series.length);
   });
 });

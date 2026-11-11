@@ -57,8 +57,7 @@ function textOf(n: Inst | string): string {
 }
 function press(r: ReactTestRenderer.ReactTestRenderer, label: RegExp) {
   const hits = r.root.findAll(
-    x =>
-      typeof x.props.onPress === 'function' && label.test(textOf(x).trim()),
+    x => typeof x.props.onPress === 'function' && label.test(textOf(x).trim()),
   );
   expect(hits.length).toBeGreaterThan(0);
   hits[hits.length - 1].props.onPress({ nativeEvent: {} });
@@ -85,7 +84,10 @@ test('list, open, replay, scrub, play and export a session', async () => {
   expect(native.loadRecording).toHaveBeenCalledWith(ID);
   expect(txt()).toMatch(/FIXES 122/);
   expect(txt()).toMatch(/STEPS \d+/);
-  expect(txt()).toMatch(/MAX \d+\.\d m/);
+  expect(txt()).toMatch(/DIST +FINAL +MAX +MEAN/);
+  expect(txt()).toMatch(/PDR +\d+ +\d+ +\d+/);
+  expect(txt()).toMatch(/INS +\d+/);
+  expect(txt()).toMatch(/no OBD speed/);
   expect(txt()).toMatch(/2:01\/2:01|2:02\/2:02/); // starts at the end
 
   // Scrub to the middle via the bar.
@@ -113,9 +115,9 @@ test('list, open, replay, scrub, play and export a session', async () => {
   expect(native.shareExports).toHaveBeenCalledTimes(1);
   const [id, out] = native.shareExports.mock.calls[0];
   expect(id).toBe(ID);
-  expect(Object.keys(out).sort()).toEqual([`${ID}-error.csv`, `${ID}.gpx`]);
+  expect(Object.keys(out).sort()).toEqual([`${ID}-pdr-error.csv`, `${ID}.gpx`]);
   expect(out[`${ID}.gpx`]).toContain('<trk><name>GPS</name>');
-  expect(out[`${ID}-error.csv`].split('\n').length).toBeGreaterThan(100);
+  expect(out[`${ID}-pdr-error.csv`].split('\n').length).toBeGreaterThan(100);
 
   await act(async () => press(r, /Back/));
   await act(flush);

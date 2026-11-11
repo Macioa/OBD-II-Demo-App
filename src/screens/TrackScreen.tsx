@@ -9,7 +9,11 @@ import {
   View,
 } from 'react-native';
 import { dlog } from '../../debugLog';
+import { Ins } from '../estimate/ins';
 import { Pdr } from '../estimate/pdr';
+import { Wheel } from '../estimate/wheel';
+import { onObdSpeed, useObd } from '../obd/session';
+import { ENGINES, EngineId } from '../session/replay';
 import { EN, pathLength, toEnu } from '../geo/enu';
 import { errorStats } from '../geo/overlay';
 import { ImuBatch, compassPoint, logEvent, onImuBatch } from '../sensors/imu';
@@ -18,6 +22,8 @@ import TrackMap from './TrackMap';
 type Timed = EN & { t: number };
 type Run = {
   pdr: Pdr;
+  ins: Ins;
+  wheel: Wheel;
   gps: Timed[];
   origin: { lat: number; lon: number } | null;
   t0: number | null;
@@ -45,6 +51,20 @@ export default function TrackScreen() {
   const [size, setSize] = useState({ w: 300, h: 300 });
   const [frozen, setFrozen] = useState<Run | null>(null);
   const [view, setView] = useState<'map' | 'grid'>('map');
+  const [engine, setEngine] = useState<EngineId>('pdr');
+  const obd = useObd();
+
+  // OBD speed → wheel engine, stamped on the IMU clock.
+  useEffect(
+    () =>
+      onObdSpeed(kmh => {
+        const r = run.current;
+        if (r && r.t0 != null) {
+          r.wheel.addSpeed(r.t, kmh);
+        }
+      }),
+    [],
+  );
 
   useEffect(
     () =>
@@ -54,7 +74,11 @@ export default function TrackScreen() {
           return;
         }
         r.pdr.addRot(b.rot);
+        r.ins.addRot(b.rot);
+        r.wheel.addRot(b.rot);
         const steps = r.pdr.addAcc(b.acc);
+        r.ins.addAcc(b.acc);
+        r.wheel.addAcc(b.acc);
         if (b.acc.length) {
           r.t = b.acc[b.acc.length - 4];
           r.t0 ??= b.acc[0];
@@ -80,9 +104,17 @@ export default function TrackScreen() {
   );
 
   function start() {
-    run.current = { pdr: new Pdr(), gps: [], origin: null, t0: null, t: 0 };
+    run.current = {
+      pdr: new Pdr(),
+      ins: new Ins(),
+      wheel: new Wheel(),
+      gps: [],
+      origin: null,
+      t0: null,
+      t: 0,
+    };
     setActive(true);
-    dlog('track: PDR started');
+    dlog(`track: started (main ${engine})`);
     logEvent('pdr start');
   }
   function stop() {
@@ -92,7 +124,9 @@ export default function TrackScreen() {
       dlog(
         `track: PDR stopped steps=${
           r.pdr.steps.length
-        } dist=${r.pdr.distance.toFixed(1)}m`,
+        } dist=${r.pdr.distance.toFixed(1)}m ins=${r.ins.distance.toFixed(
+          1,
+        )}m wheel=${r.wheel.distance.toFixed(1)}m speeds=${r.wheel.speeds}`,
       );
       logEvent('pdr stop');
       // Stop feeding it but keep the result on screen.
@@ -102,7 +136,24 @@ export default function TrackScreen() {
   }
   const r = run.current ?? frozen;
 
-  const est: Timed[] = r ? [{ t: r.t0 ?? 0, e: 0, n: 0 }, ...r.pdr.steps] : [];
+  const tracks: Record<EngineId, Timed[]> = {
+    pdr: r ? [{ t: r.t0 ?? 0, e: 0, n: 0 }, ...r.pdr.steps] : [],
+    ins: r?.ins.track ?? [],
+    wheel: r?.wheel.speeds ? r.wheel.track() : [],
+  };
+  const est: Timed[] = tracks[engine];
+  const dists: Record<EngineId, number> = {
+    pdr: r?.pdr.distance ?? 0,
+    ins: r?.ins.distance ?? 0,
+    wheel: r?.wheel.distance ?? 0,
+  };
+  const ids = Object.keys(ENGINES) as EngineId[];
+  const others = ids
+    .filter(k => k !== engine && tracks[k].length)
+    .map(k => ({ id: k, color: ENGINES[k].color, pts: thin(tracks[k], 2000) }));
+  const curPt = est.length ? est[est.length - 1] : { e: 0, n: 0 };
+  const heading =
+    engine === 'wheel' ? r?.wheel.heading ?? null : r?.pdr.heading ?? null;
   const gps = r?.gps ?? [];
   const showGps = !(active && gpsDenied);
   const gpsDist = pathLength(gps);
@@ -142,7 +193,7 @@ export default function TrackScreen() {
     <View style={s.page}>
       <View style={s.top}>
         <Text style={s.h1}>
-          {active ? '◉ PDR ' : 'Track '}
+          {active ? `◉ ${ENGINES[engine].label} ` : 'Track '}
           <Text style={s.mono}>{fmtTime(elapsed)}</Text>
         </Text>
         <View style={s.row}>
@@ -172,9 +223,11 @@ export default function TrackScreen() {
           est={est}
           gps={gps}
           links={links.filter((_, i) => i % 5 === 0)}
-          cur={r.pdr}
-          focus={showGps && gps.length ? gps[gps.length - 1] : r.pdr}
+          cur={curPt}
+          focus={showGps && gps.length ? gps[gps.length - 1] : curPt}
           showGps={showGps}
+          others={others}
+          estColor={ENGINES[engine].color}
         />
       ) : (
         <View style={s.plot} onLayout={onLayout}>
@@ -184,10 +237,17 @@ export default function TrackScreen() {
               <View key={`g${i}`} style={[s.dot, s.gps, toXY(p)]} />
             ))}
           {thin(est, MAX_DOTS).map((p, i) => (
-            <View key={`e${i}`} style={[s.dot, s.est, toXY(p)]} />
+            <View
+              key={`e${i}`}
+              style={[
+                s.dot,
+                { backgroundColor: ENGINES[engine].color },
+                toXY(p),
+              ]}
+            />
           ))}
           {r && <View style={[s.start, toXY({ e: 0, n: 0 })]} />}
-          {r && <View style={[s.cur, toXY(r.pdr)]} />}
+          {r && <View style={[s.cur, toXY(curPt)]} />}
           {!r && (
             <Text style={s.hint}>
               Start, then walk holding the phone flat, top edge forward.
@@ -197,13 +257,25 @@ export default function TrackScreen() {
       )}
       <View style={s.legend}>
         <Text style={s.gpsTxt}>● GPS</Text>
-        <Text style={s.estTxt}>● PDR estimate</Text>
+        {ids.map(k => (
+          <Pressable
+            key={k}
+            testID={`track-engine-${k}`}
+            onPress={() => setEngine(k)}
+          >
+            <Text
+              style={[{ color: ENGINES[k].color }, engine === k && s.engineOn]}
+            >
+              ● {ENGINES[k].label}
+            </Text>
+          </Pressable>
+        ))}
         {onMap && <Text style={s.dim}>┄ error / 5 s</Text>}
       </View>
 
       <View style={s.hud}>
         <Text style={s.mono}>
-          DIST EST {(r?.pdr.distance ?? 0).toFixed(0)} m │ GPS{' '}
+          DIST EST {dists[engine].toFixed(0)} m │ GPS{' '}
           {showGps ? `${gpsDist.toFixed(0)} m` : 'hidden'}
           {'\n'}ERROR {showGps && err != null ? `${err.toFixed(1)} m` : '—'} │{' '}
           {showGps && err != null && gpsDist > 1
@@ -214,17 +286,23 @@ export default function TrackScreen() {
           MEAN{' '}
           {showGps && stats?.mean != null ? `${stats.mean.toFixed(1)} m` : '—'}
           {'\n'}HDG{' '}
-          {r?.pdr.heading != null
-            ? `${r.pdr.heading.toFixed(0).padStart(3, '0')}° ${compassPoint(
-                r.pdr.heading,
-              )}`
+          {heading != null
+            ? `${heading.toFixed(0).padStart(3, '0')}° ${compassPoint(heading)}`
             : '—'}{' '}
           │ STEPS {r?.pdr.steps.length ?? 0} ·{' '}
           {r ? r.pdr.cadence(r.t).toFixed(1) : '0.0'}/s
+          {'\n'}PDR {dists.pdr.toFixed(0)} │ INS {dists.ins.toFixed(0)}
+          {r?.ins.still ? ' (still)' : ''} │ WHEEL{' '}
+          {r?.wheel.speeds ? `${dists.wheel.toFixed(0)} m` : '—'}
+          {'\n'}OBD{' '}
+          {obd.status === 'reading'
+            ? `${obd.live.kmh ?? '—'} km/h`
+            : `${obd.status} (wheel needs OBD)`}{' '}
+          │ AXIS {r?.wheel.learned ? `learned ×${r.wheel.learned}` : '—'}
         </Text>
       </View>
       <Button
-        title={active ? '■ Stop' : '▶ Start PDR'}
+        title={active ? '■ Stop' : '▶ Start'}
         onPress={active ? stop : start}
       />
     </View>
@@ -265,7 +343,6 @@ const s = StyleSheet.create({
     borderRadius: 2,
   },
   gps: { backgroundColor: '#1565c0' },
-  est: { backgroundColor: '#d84315' },
   start: {
     position: 'absolute',
     width: 10,
@@ -288,7 +365,7 @@ const s = StyleSheet.create({
   },
   legend: { flexDirection: 'row', gap: 16 },
   gpsTxt: { color: '#1565c0' },
-  estTxt: { color: '#d84315' },
+  engineOn: { fontWeight: '700', textDecorationLine: 'underline' },
   hud: { padding: 10, borderRadius: 8, backgroundColor: '#f2f2f2' },
   mono: { fontFamily: 'monospace', fontSize: 13 },
   dim: { color: '#666' },

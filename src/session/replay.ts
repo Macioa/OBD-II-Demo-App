@@ -1,4 +1,6 @@
+import { Ins } from '../estimate/ins';
 import { DEFAULT_PDR, Pdr, PdrParams } from '../estimate/pdr';
+import { Wheel } from '../estimate/wheel';
 import { EN, fromEnu, pathLength, toEnu } from '../geo/enu';
 import { ErrorStats, Origin, Timed, errorStats } from '../geo/overlay';
 
@@ -72,6 +74,58 @@ export function runPdr(pdr: Pdr, imu: Imu, batchS = 0.1) {
   return pdr;
 }
 
+/**
+ * M5: PDR, INS and wheel-speed fed the same 100 ms batches (rotation, then
+ * OBD speeds, then accel), the order the live Track screen uses.
+ */
+export function runEngines(imu: Imu, speeds: number[] = [], batchS = 0.1) {
+  const pdr = new Pdr();
+  const ins = new Ins();
+  const wheel = new Wheel();
+  const { acc, rot } = imu;
+  let ai = 0;
+  let ri = 0;
+  let si = 0;
+  for (let end = (acc[0] ?? 0) + batchS; ai < acc.length; end += batchS) {
+    const r0 = ri;
+    while (ri < rot.length && rot[ri] < end) {
+      ri += 5;
+    }
+    const a0 = ai;
+    while (ai < acc.length && acc[ai] < end) {
+      ai += 4;
+    }
+    const r = rot.slice(r0, ri);
+    const a = acc.slice(a0, ai);
+    pdr.addRot(r);
+    ins.addRot(r);
+    wheel.addRot(r);
+    while (si < speeds.length && speeds[si] < end) {
+      wheel.addSpeed(speeds[si], speeds[si + 1]);
+      si += 2;
+    }
+    pdr.addAcc(a);
+    ins.addAcc(a);
+    wheel.addAcc(a);
+  }
+  return { pdr, ins, wheel };
+}
+
+export type EngineId = 'pdr' | 'ins' | 'wheel';
+export const ENGINES: Record<EngineId, { label: string; color: string }> = {
+  pdr: { label: 'PDR', color: '#d84315' },
+  ins: { label: 'INS', color: '#6a1b9a' },
+  wheel: { label: 'Wheel', color: '#2e7d32' },
+};
+
+export type EngineRun = {
+  id: EngineId;
+  est: Timed[];
+  dist: number;
+  stats: ErrorStats;
+  errPerDist: number | null;
+};
+
 export type Replay = {
   origin: Origin | null;
   gps: Timed[];
@@ -84,19 +138,25 @@ export type Replay = {
   stats: ErrorStats;
   /** Final error as a fraction of GPS distance; null when GPS barely moved. */
   errPerDist: number | null;
+  /** M5: every engine on the same data; PDR first, wheel only with OBD speed. */
+  engines: EngineRun[];
+  obdSpeeds: number;
 };
 
 export function replay(
   fixes: GpsFix[],
   imu: Imu,
   params: Partial<PdrParams> = {},
+  speeds: number[] = [],
 ): Replay {
   const pdr = runPdr(new Pdr({ ...DEFAULT_PDR, ...params }), imu);
-  const origin = fixes.length
-    ? { lat: fixes[0].lat, lon: fixes[0].lon }
-    : null;
+  const { ins, wheel } = runEngines(imu, speeds);
+  const origin = fixes.length ? { lat: fixes[0].lat, lon: fixes[0].lon } : null;
   const gps: Timed[] = origin
-    ? fixes.map(f => ({ t: f.t, ...toEnu(f.lat, f.lon, origin.lat, origin.lon) }))
+    ? fixes.map(f => ({
+        t: f.t,
+        ...toEnu(f.lat, f.lon, origin.lat, origin.lon),
+      }))
     : [];
   const t0 = imu.acc.length ? imu.acc[0] : gps.length ? gps[0].t : 0;
   const tEnd = Math.max(
@@ -106,6 +166,23 @@ export function replay(
   const est: Timed[] = [{ t: t0, e: 0, n: 0 }, ...pdr.steps];
   const stats = errorStats(est, gps, t0, tEnd);
   const gpsDist = pathLength(gps);
+  const perDist = (cur: number | null) =>
+    gpsDist >= 10 && cur != null ? cur / gpsDist : null;
+  const run = (id: EngineId, e: Timed[], d: number): EngineRun => {
+    const st = id === 'pdr' ? stats : errorStats(e, gps, t0, tEnd);
+    return { id, est: e, dist: d, stats: st, errPerDist: perDist(st.cur) };
+  };
+  const engines = [
+    run('pdr', est, pdr.distance),
+    run(
+      'ins',
+      ins.track.length ? ins.track : [{ t: t0, e: 0, n: 0 }],
+      ins.distance,
+    ),
+  ];
+  if (speeds.length) {
+    engines.push(run('wheel', wheel.track(), wheel.distance));
+  }
   return {
     origin,
     gps,
@@ -116,12 +193,17 @@ export function replay(
     estDist: pdr.distance,
     gpsDist,
     stats,
-    errPerDist: gpsDist >= 10 && stats.cur != null ? stats.cur / gpsDist : null,
+    errPerDist: perDist(stats.cur),
+    engines,
+    obdSpeeds: speeds.length / 2,
   };
 }
 
-/** Everything up to playhead time t, for drawing a replay frame. */
-export function frameAt(r: Replay, t: number) {
+/**
+ * Everything up to playhead time t, for drawing a replay frame. `engine`
+ * picks the main estimate (with error links); the rest come back as `others`.
+ */
+export function frameAt(r: Replay, t: number, engine: EngineId = 'pdr') {
   const upTo = <T extends { t: number }>(a: T[]) => {
     let i = a.length;
     while (i > 0 && a[i - 1].t > t) {
@@ -129,9 +211,13 @@ export function frameAt(r: Replay, t: number) {
     }
     return a.slice(0, i);
   };
-  const est = upTo(r.est);
+  const main = r.engines?.find(x => x.id === engine);
+  const est = upTo(main?.est ?? r.est);
   const gps = upTo(r.gps);
-  const links = upTo(r.stats.series);
+  const links = upTo(main?.stats.series ?? r.stats.series);
+  const others = (r.engines ?? [])
+    .filter(x => x !== main)
+    .map(x => ({ id: x.id, color: ENGINES[x.id].color, pts: upTo(x.est) }));
   const last = <T>(a: T[]) => (a.length ? a[a.length - 1] : undefined);
   return {
     est,
@@ -140,6 +226,7 @@ export function frameAt(r: Replay, t: number) {
     cur: (last(est) ?? { e: 0, n: 0 }) as EN,
     focus: (last(gps) ?? last(est) ?? { e: 0, n: 0 }) as EN,
     err: last(links)?.err ?? null,
+    others,
   };
 }
 
@@ -159,7 +246,7 @@ const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const f7 = (x: number) => x.toFixed(7);
 
-/** GPX 1.1 with two tracks: GPS truth and the PDR estimate. */
+/** GPX 1.1: GPS truth, the PDR estimate, then INS / wheel estimates (M5). */
 export function toGpx(
   r: Replay,
   name: string,
@@ -167,7 +254,9 @@ export function toGpx(
   t0Ms: number | null,
 ) {
   const time = (t: number) =>
-    t0Ms != null ? `<time>${new Date(t0Ms + t * 1000).toISOString()}</time>` : '';
+    t0Ms != null
+      ? `<time>${new Date(t0Ms + t * 1000).toISOString()}</time>`
+      : '';
   const out = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<gpx version="1.1" creator="OBD App" xmlns="http://www.topografix.com/GPX/1/1">',
@@ -185,19 +274,38 @@ export function toGpx(
   if (r.origin) {
     for (const p of r.est) {
       const g = fromEnu(p.e, p.n, r.origin.lat, r.origin.lon);
-      out.push(`<trkpt lat="${f7(g.lat)}" lon="${f7(g.lon)}">${time(p.t)}</trkpt>`);
+      out.push(
+        `<trkpt lat="${f7(g.lat)}" lon="${f7(g.lon)}">${time(p.t)}</trkpt>`,
+      );
     }
   }
-  out.push('</trkseg></trk>', '</gpx>', '');
+  out.push('</trkseg></trk>');
+  for (const x of r.engines ?? []) {
+    if (x.id === 'pdr' || !r.origin) {
+      continue;
+    }
+    out.push(`<trk><name>${ENGINES[x.id].label} estimate</name><trkseg>`);
+    for (const p of x.est) {
+      const g = fromEnu(p.e, p.n, r.origin.lat, r.origin.lon);
+      out.push(
+        `<trkpt lat="${f7(g.lat)}" lon="${f7(g.lon)}">${time(p.t)}</trkpt>`,
+      );
+    }
+    out.push('</trkseg></trk>');
+  }
+  out.push('</gpx>', '');
   return out.join('\n');
 }
 
 /** One row per second over GPS coverage: both positions and the error. */
-export function toCsv(r: Replay) {
-  const rows = ['t,gps_lat,gps_lon,est_lat,est_lon,gps_e,gps_n,est_e,est_n,err_m'];
+export function toCsv(r: Replay, engine: EngineId = 'pdr') {
+  const stats = r.engines?.find(x => x.id === engine)?.stats ?? r.stats;
+  const rows = [
+    't,gps_lat,gps_lon,est_lat,est_lon,gps_e,gps_n,est_e,est_n,err_m',
+  ];
   if (r.origin) {
     const o = r.origin;
-    for (const s of r.stats.series) {
+    for (const s of stats.series) {
       const a = fromEnu(s.a.e, s.a.n, o.lat, o.lon);
       const b = fromEnu(s.b.e, s.b.n, o.lat, o.lon);
       rows.push(
