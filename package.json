@@ -10,7 +10,9 @@
     "test": "jest"
   },
   "dependencies": {
+    "@maplibre/maplibre-react-native": "^11.5.1",
     "@react-native/new-app-screen": "0.88.1",
+    "@types/geojson": "^7946.0.16",
     "buffer": "^6.0.3",
     "react": "19.3.0",
     "react-native": "0.88.1",

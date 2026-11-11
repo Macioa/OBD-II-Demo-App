@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Button,
   LayoutChangeEvent,
+  Pressable,
   StyleSheet,
   Switch,
   Text,
@@ -9,8 +10,10 @@ import {
 } from 'react-native';
 import { dlog } from '../../debugLog';
 import { Pdr } from '../estimate/pdr';
-import { EN, at, dist, pathLength, toEnu } from '../geo/enu';
+import { EN, pathLength, toEnu } from '../geo/enu';
+import { errorStats } from '../geo/overlay';
 import { ImuBatch, compassPoint, logEvent, onImuBatch } from '../sensors/imu';
+import TrackMap from './TrackMap';
 
 type Timed = EN & { t: number };
 type Run = {
@@ -33,7 +36,7 @@ function thin<T>(a: T[], max: number) {
   );
 }
 
-/** M2: PDR path vs GPS path on a local metric grid (map comes in M3). */
+/** PDR path vs GPS path: offline map (M3) or local metric grid. */
 export default function TrackScreen() {
   const run = useRef<Run | null>(null);
   const [, setTick] = useState(0);
@@ -41,6 +44,7 @@ export default function TrackScreen() {
   const [gpsDenied, setGpsDenied] = useState(false);
   const [size, setSize] = useState({ w: 300, h: 300 });
   const [frozen, setFrozen] = useState<Run | null>(null);
+  const [view, setView] = useState<'map' | 'grid'>('map');
 
   useEffect(
     () =>
@@ -102,7 +106,10 @@ export default function TrackScreen() {
   const gps = r?.gps ?? [];
   const showGps = !(active && gpsDenied);
   const gpsDist = pathLength(gps);
-  const err = r && gps.length ? dist(at(gps, r.t), r.pdr) : null;
+  const stats = r && r.t0 != null ? errorStats(est, gps, r.t0, r.t) : null;
+  const err = stats?.cur ?? null;
+  const links = stats?.series ?? [];
+  const onMap = view === 'map' && r?.origin != null;
   const elapsed = r && r.t0 != null ? r.t - r.t0 : 0;
 
   // Fit everything (with ≥20 m span) into the plot, north up, equal scale.
@@ -144,26 +151,53 @@ export default function TrackScreen() {
         </View>
       </View>
 
-      <View style={s.plot} onLayout={onLayout}>
-        <Text style={s.grid}>grid {gridStep} m · N↑</Text>
-        {showGps &&
-          thin(gps, MAX_DOTS).map((p, i) => (
-            <View key={`g${i}`} style={[s.dot, s.gps, toXY(p)]} />
-          ))}
-        {thin(est, MAX_DOTS).map((p, i) => (
-          <View key={`e${i}`} style={[s.dot, s.est, toXY(p)]} />
+      <View style={s.row}>
+        {(['map', 'grid'] as const).map(v => (
+          <Pressable
+            key={v}
+            onPress={() => setView(v)}
+            style={[s.seg, view === v && s.segOn]}
+          >
+            <Text>{v === 'map' ? 'Map' : 'Grid'}</Text>
+          </Pressable>
         ))}
-        {r && <View style={[s.start, toXY({ e: 0, n: 0 })]} />}
-        {r && <View style={[s.cur, toXY(r.pdr)]} />}
-        {!r && (
-          <Text style={s.hint}>
-            Start, then walk holding the phone flat, top edge forward.
-          </Text>
+        {view === 'map' && !r?.origin && (
+          <Text style={s.dim}> map needs a GPS fix — showing grid</Text>
         )}
       </View>
+
+      {onMap && r?.origin ? (
+        <TrackMap
+          origin={r.origin}
+          est={est}
+          gps={gps}
+          links={links.filter((_, i) => i % 5 === 0)}
+          cur={r.pdr}
+          showGps={showGps}
+        />
+      ) : (
+        <View style={s.plot} onLayout={onLayout}>
+          <Text style={s.grid}>grid {gridStep} m · N↑</Text>
+          {showGps &&
+            thin(gps, MAX_DOTS).map((p, i) => (
+              <View key={`g${i}`} style={[s.dot, s.gps, toXY(p)]} />
+            ))}
+          {thin(est, MAX_DOTS).map((p, i) => (
+            <View key={`e${i}`} style={[s.dot, s.est, toXY(p)]} />
+          ))}
+          {r && <View style={[s.start, toXY({ e: 0, n: 0 })]} />}
+          {r && <View style={[s.cur, toXY(r.pdr)]} />}
+          {!r && (
+            <Text style={s.hint}>
+              Start, then walk holding the phone flat, top edge forward.
+            </Text>
+          )}
+        </View>
+      )}
       <View style={s.legend}>
         <Text style={s.gpsTxt}>● GPS</Text>
         <Text style={s.estTxt}>● PDR estimate</Text>
+        {onMap && <Text style={s.dim}>┄ error / 5 s</Text>}
       </View>
 
       <View style={s.hud}>
@@ -174,6 +208,10 @@ export default function TrackScreen() {
           {showGps && err != null && gpsDist > 1
             ? `${((100 * err) / gpsDist).toFixed(1)} % of dist`
             : '—'}
+          {'\n'}MAX ERR{' '}
+          {showGps && stats?.max != null ? `${stats.max.toFixed(1)} m` : '—'} │
+          MEAN{' '}
+          {showGps && stats?.mean != null ? `${stats.mean.toFixed(1)} m` : '—'}
           {'\n'}HDG{' '}
           {r?.pdr.heading != null
             ? `${r.pdr.heading.toFixed(0).padStart(3, '0')}° ${compassPoint(
@@ -253,4 +291,11 @@ const s = StyleSheet.create({
   hud: { padding: 10, borderRadius: 8, backgroundColor: '#f2f2f2' },
   mono: { fontFamily: 'monospace', fontSize: 13 },
   dim: { color: '#666' },
+  seg: {
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  segOn: { backgroundColor: '#e0e0e0' },
 });
