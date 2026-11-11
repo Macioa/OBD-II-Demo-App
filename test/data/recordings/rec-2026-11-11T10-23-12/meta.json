@@ -1,0 +1,78 @@
+{
+  "id": "rec-2026-11-11T10-23-12",
+  "startedAt": "2026-11-11T16:23:12.958Z",
+  "device": {
+    "manufacturer": "REDACTED-PHONE-MFR",
+    "model": "REDACTED-PHONE-MODEL",
+    "android": "16",
+    "sdk": 36
+  },
+  "sensors": {
+    "acc": {
+      "name": "lsm6dso LSM6DSO Accelerometer Non-wakeup",
+      "vendor": "STMicro",
+      "version": 15933,
+      "maxHz": 415.97337770382694,
+      "resolution": 0.0023928226437419653,
+      "maxRange": 78.45320129394531
+    },
+    "gyr": {
+      "name": "lsm6dso LSM6DSO Gyroscope Non-wakeup",
+      "vendor": "STMicro",
+      "version": 15933,
+      "maxHz": 415.97337770382694,
+      "resolution": 0.000610864779446274,
+      "maxRange": 17.453018188476562
+    },
+    "mag": {
+      "name": "ak0991x AK09918 Magnetometer Non-wakeup",
+      "vendor": "akm",
+      "version": 146988,
+      "maxHz": 100,
+      "resolution": 0.15000000596046448,
+      "maxRange": 4912.05029296875
+    },
+    "rot": {
+      "name": "Rotation Vector  Non-wakeup",
+      "vendor": "QTI",
+      "version": 1,
+      "maxHz": 200,
+      "resolution": 0.009999999776482582,
+      "maxRange": 1
+    },
+    "gpsPermission": true,
+    "sdk": 36
+  },
+  "app": {
+    "startReason": "user",
+    "magAccuracy": 3,
+    "heading": 87.8562411532717,
+    "gyroBias": [
+      3.0160706626488655e-05,
+      0.00046403361597122637,
+      0.0006816321119440334
+    ],
+    "rateHz": 100,
+    "stopReason": "user"
+  },
+  "format": "see SessionRecorder.kt header; t = seconds since start, monotonic",
+  "stoppedAt": "2026-11-11T16:30:05.107Z",
+  "durationS": 412.155569478,
+  "rows": {
+    "acc": 42302,
+    "gyr": 42302,
+    "mag": 41217,
+    "rot": 42302,
+    "gps": 412
+  },
+  "imuChunks": 1,
+  "sanitized": {
+    "by": "test/scripts/scrub_recording.py",
+    "gps": "track moved to anchor 51.4779,-0.0015; metre offsets, speed and bearing preserved; altitude relative to first fix",
+    "gpsFixes": 412,
+    "device": "make/model redacted; sensor chips kept",
+    "times": "wall-clock converted to UTC",
+    "events": "OBD lines scrubbed like scrub_obd_log.py",
+    "notAltered": "imu_*.csv (magnetometer field loosely indicates world region)"
+  }
+}
