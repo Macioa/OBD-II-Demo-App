@@ -61,6 +61,7 @@ export default function TrackScreen() {
         const r = run.current;
         if (r && r.t0 != null) {
           r.wheel.addSpeed(r.t, kmh);
+          r.pdr.addSpeed(r.t, kmh);
         }
       }),
     [],

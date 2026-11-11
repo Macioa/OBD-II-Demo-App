@@ -17,6 +17,9 @@ export type PdrParams = {
   weinbergK: number;
   lowPassHz: number;
   headingOffsetDeg: number; // phone-to-walking-direction offset
+  /** OBD speed above this (km/h), seen in the last vehicleStaleS, means driving: no steps. */
+  vehicleKmh: number;
+  vehicleStaleS: number;
 };
 
 export const DEFAULT_PDR: PdrParams = {
@@ -27,6 +30,8 @@ export const DEFAULT_PDR: PdrParams = {
   weinbergK: 0.48,
   lowPassHz: 3,
   headingOffsetDeg: 0,
+  vehicleKmh: 0,
+  vehicleStaleS: 6,
 };
 
 export type Step = {
@@ -54,9 +59,19 @@ export class Pdr {
   private peakVal = 0;
   private peakT = 0;
   private minSince = 0;
+  private kmh = 0;
+  private kmhT = -Infinity;
+  /** Steps rejected because OBD said the car was moving. */
+  gated = 0;
 
   constructor(params: Partial<PdrParams> = {}) {
     this.p = { ...DEFAULT_PDR, ...params };
+  }
+
+  /** OBD vehicle speed (M5 gate): car vibration must not count as steps. */
+  addSpeed(t: number, kmh: number) {
+    this.kmh = kmh;
+    this.kmhT = t;
   }
 
   /** Flat stride-5 [t, qx, qy, qz, qw, ...]. */
@@ -125,6 +140,13 @@ export class Pdr {
       return null;
     }
     this.lastStepT = this.peakT;
+    if (
+      this.kmh > this.p.vehicleKmh &&
+      this.peakT - this.kmhT <= this.p.vehicleStaleS
+    ) {
+      this.gated++;
+      return null;
+    }
     const len = this.p.weinbergK * Math.pow(this.peakVal - this.minSince, 0.25);
     const hdg = ((this.heading ?? 0) + this.p.headingOffsetDeg + 360) % 360;
     const h = (hdg * Math.PI) / 180;

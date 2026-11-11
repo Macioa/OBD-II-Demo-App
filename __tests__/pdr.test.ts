@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { parseObdSpeeds } from '../src/estimate/wheel';
 import fs from 'fs';
 import path from 'path';
 import { Pdr } from '../src/estimate/pdr';
@@ -25,8 +26,8 @@ function walk(seconds: number, heading: (t: number) => number, amp = 2.5) {
 }
 
 /** Feed in 100 ms batches, rot before acc, like the live stream. */
-function run(pdr: Pdr, acc: number[], rot: number[]) {
-  for (let t0 = 0, ai = 0, ri = 0; ai < acc.length; t0 += 0.1) {
+function run(pdr: Pdr, acc: number[], rot: number[], speeds: number[] = []) {
+  for (let t0 = 0, ai = 0, ri = 0, si = 0; ai < acc.length; t0 += 0.1) {
     const r: number[] = [];
     while (ri < rot.length && rot[ri] < t0 + 0.1) {
       r.push(...rot.slice(ri, ri + 5));
@@ -38,6 +39,10 @@ function run(pdr: Pdr, acc: number[], rot: number[]) {
       ai += 4;
     }
     pdr.addRot(r);
+    while (si < speeds.length && speeds[si] < t0 + 0.1) {
+      pdr.addSpeed(speeds[si], speeds[si + 1]);
+      si += 2;
+    }
     pdr.addAcc(a);
   }
 }
@@ -119,7 +124,11 @@ const recordings = fs.existsSync(REC)
 describe.each(recordings)('recording %s', name => {
   const rec = loadRecording(path.join(REC, name));
   const pdr = new Pdr();
-  run(pdr, rec.acc, rec.rot);
+  const events = path.join(REC, name, 'events.log');
+  const speeds = fs.existsSync(events)
+    ? parseObdSpeeds(fs.readFileSync(events, 'utf8'))
+    : [];
+  run(pdr, rec.acc, rec.rot, speeds);
   const gpsDist = pathLength(rec.gps);
   const meanSpeed = gpsDist / rec.gps[rec.gps.length - 1].t;
   const driving = meanSpeed > 3;
@@ -129,6 +138,7 @@ describe.each(recordings)('recording %s', name => {
     gpsDistM: +gpsDist.toFixed(1),
     meanSpeedMs: +meanSpeed.toFixed(2),
     steps: pdr.steps.length,
+    gatedByObd: pdr.gated,
     pdrDistM: +pdr.distance.toFixed(1),
     finalErrM: +dist(at(rec.gps, rec.gps[rec.gps.length - 1].t), pdr).toFixed(
       1,

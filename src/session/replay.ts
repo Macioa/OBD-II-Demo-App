@@ -52,8 +52,14 @@ export function parseImu(csv: string, into: Imu = { acc: [], rot: [] }): Imu {
  * Feed the streams in 100 ms batches, rotation before accel, exactly like the
  * live imuBatch events, so heading at each step matches what was seen live.
  */
-export function runPdr(pdr: Pdr, imu: Imu, batchS = 0.1) {
+export function runPdr(
+  pdr: Pdr,
+  imu: Imu,
+  batchS = 0.1,
+  speeds: number[] = [],
+) {
   const { acc, rot } = imu;
+  let si = 0;
   if (!acc.length) {
     return pdr;
   }
@@ -69,6 +75,10 @@ export function runPdr(pdr: Pdr, imu: Imu, batchS = 0.1) {
       ai += 4;
     }
     pdr.addRot(rot.slice(r0, ri));
+    while (si < speeds.length && speeds[si] < end) {
+      pdr.addSpeed(speeds[si], speeds[si + 1]);
+      si += 2;
+    }
     pdr.addAcc(acc.slice(a0, ai));
   }
   return pdr;
@@ -101,6 +111,7 @@ export function runEngines(imu: Imu, speeds: number[] = [], batchS = 0.1) {
     ins.addRot(r);
     wheel.addRot(r);
     while (si < speeds.length && speeds[si] < end) {
+      pdr.addSpeed(speeds[si], speeds[si + 1]);
       wheel.addSpeed(speeds[si], speeds[si + 1]);
       si += 2;
     }
@@ -149,7 +160,7 @@ export function replay(
   params: Partial<PdrParams> = {},
   speeds: number[] = [],
 ): Replay {
-  const pdr = runPdr(new Pdr({ ...DEFAULT_PDR, ...params }), imu);
+  const pdr = runPdr(new Pdr({ ...DEFAULT_PDR, ...params }), imu, 0.1, speeds);
   const { ins, wheel } = runEngines(imu, speeds);
   const origin = fixes.length ? { lat: fixes[0].lat, lon: fixes[0].lon } : null;
   const gps: Timed[] = origin

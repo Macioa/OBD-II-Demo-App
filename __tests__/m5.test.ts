@@ -113,3 +113,22 @@ test('replay includes the wheel engine only with OBD speed; frameAt picks it', (
   expect(f.cur.e).toBeGreaterThan(90);
   expect(f.others.map(o => o.id)).toEqual(['pdr', 'ins']);
 });
+
+test('PDR ignores steps while OBD says the car is moving', () => {
+  const { Pdr } = require('../src/estimate/pdr');
+  const walk = (p: any, from: number, kmh: number) => {
+    for (let i = 0; i < 1000; i++) {
+      const t = from + i / 100;
+      if (i % 100 === 0) {
+        p.addSpeed(t, kmh); // OBD ~1 Hz
+      }
+      p.sample(t, 0, 0, G + 2.5 * Math.sin(2 * Math.PI * 2 * t));
+    }
+  };
+  const p = new Pdr();
+  walk(p, 0, 40);
+  expect(p.steps).toHaveLength(0);
+  expect(p.gated).toBeGreaterThan(10);
+  walk(p, 10, 0); // parked: walking counts again
+  expect(p.steps.length).toBeGreaterThan(10);
+});
