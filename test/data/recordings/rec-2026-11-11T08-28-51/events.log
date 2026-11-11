@@ -1,0 +1,28 @@
+0.011342 recording started rec-2026-11-11T08-28-51
+0.013254 app: recording started rec-2026-11-11T08-28-51
+2.170219 app: tab track
+5.012868 health 5s counts a/g/m/r=516/516/502/516 maxGap ms=10/10/10/10 magAcc=3 gpsAge=0.6s gpsAcc=3.7900925m sats=27 bytes=97000 wall=1794407336483
+10.014619 health 5s counts a/g/m/r=514/514/501/514 maxGap ms=10/10/10/10 magAcc=3 gpsAge=0.6s gpsAcc=3.7900925m sats=29 bytes=193616 wall=1794407341485
+10.924010 app: track: PDR started
+10.924234 pdr start
+11.416619 app: track: GPS anchor REDACTED
+14.113920 app: tab obd
+15.017368 health 5s counts a/g/m/r=514/514/500/513 maxGap ms=10/10/10/10 magAcc=3 gpsAge=0.6s gpsAcc=3.9118967m sats=28 bytes=292178 wall=1794407346488
+17.278961 app: tab calibrate
+20.019847 health 5s counts a/g/m/r=513/513/501/514 maxGap ms=10/10/10/10 magAcc=3 gpsAge=0.6s gpsAcc=3.7900925m sats=26 bytes=390809 wall=1794407351490
+20.395212 app: tab track
+23.536871 app: tab obd
+25.021144 health 5s counts a/g/m/r=513/513/500/513 maxGap ms=10/10/10/10 magAcc=3 gpsAge=0.6s gpsAcc=9.935046m sats=28 bytes=488836 wall=1794407356491
+26.659577 app: tab calibrate
+29.826664 app: tab track
+30.022800 health 5s counts a/g/m/r=513/514/500/514 maxGap ms=10/10/10/10 magAcc=3 gpsAge=0.6s gpsAcc=9.935046m sats=25 bytes=587584 wall=1794407361493
+32.973706 app: tab obd
+35.023567 health 5s counts a/g/m/r=514/513/500/513 maxGap ms=10/10/10/10 magAcc=3 gpsAge=0.6s gpsAcc=10.81046m sats=27 bytes=686441 wall=1794407366494
+36.114753 app: tab calibrate
+39.264499 app: tab track
+40.024980 health 5s counts a/g/m/r=513/513/500/513 maxGap ms=10/10/10/10 magAcc=3 gpsAge=0.6s gpsAcc=10.6264715m sats=30 bytes=785399 wall=1794407371495
+42.827002 app: tab calibrate
+45.026105 health 5s counts a/g/m/r=514/514/500/514 maxGap ms=10/10/10/10 magAcc=3 gpsAge=0.6s gpsAcc=10.537903m sats=26 bytes=884041 wall=1794407376496
+50.027025 health 5s counts a/g/m/r=513/513/500/513 maxGap ms=10/10/10/10 magAcc=3 gpsAge=0.6s gpsAcc=10.850761m sats=30 bytes=982853 wall=1794407381497
+51.915100 app: recording stop requested by user
+51.916061 recording stopped; rows a/g/m/r=5331/5331/5193/5331 gps=52 bytes=1020170

@@ -47,6 +47,9 @@ def unescape(s):
     return s.replace("\\r", "\r").replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
 
 
+ANCHOR_RE = re.compile(r"GPS anchor -?\d+\.\d+,\s*-?\d+\.\d+")
+
+
 def scrub_text(src):
     """Return (scrubbed text, {"macs": ..., "names": ...}). Line count is preserved."""
     # --- MAC addresses -> RFC 7042 documentation range 00:00:5E:00:53:xx
@@ -71,6 +74,8 @@ def scrub_text(src):
     out = []
     for line in src.split("\n"):
         orig = line
+        # Track screen logs its start fix ("track: GPS anchor lat,lon").
+        line = ANCHOR_RE.sub("GPS anchor REDACTED", line)
         if line.startswith("Device: "):
             d = json.loads(line[8:])
             d["Brand"] = "REDACTED-PHONE-BRAND"
