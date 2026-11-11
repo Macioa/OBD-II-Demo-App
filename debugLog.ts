@@ -1,4 +1,5 @@
-import {NativeModules, Platform} from 'react-native';
+import { NativeModules, Platform } from 'react-native';
+import { logEvent } from './src/sensors/imu';
 
 // Collects a timestamped trace of the connection attempt so it can be
 // saved to Downloads or emailed when something goes wrong.
@@ -17,6 +18,8 @@ export function dlog(msg: string) {
     lines.splice(0, lines.length - 500000);
   }
   console.log('[debug]', msg);
+  // Mirror into the active recording so a session carries its own app log.
+  logEvent(`app: ${msg}`);
 }
 
 // Keep the first few frames and drop the long dev-server bundle URLs.
@@ -34,7 +37,9 @@ export function dlogError(where: string, e: any) {
     `ERROR in ${where}: ${e?.message ?? e}` +
       (e?.errorCode != null ? ` | bleErrorCode=${e.errorCode}` : '') +
       (e?.reason ? ` | reason=${e.reason}` : '') +
-      (e?.androidErrorCode != null ? ` | androidCode=${e.androidErrorCode}` : '') +
+      (e?.androidErrorCode != null
+        ? ` | androidCode=${e.androidErrorCode}`
+        : '') +
       (e?.attErrorCode != null ? ` | attCode=${e.attErrorCode}` : '') +
       (e?.stack ? `\n${shortStack(e.stack)}` : ''),
   );
@@ -53,7 +58,7 @@ export function resetLog() {
   lines.length = 0;
 }
 
-function buildReport() {
+export function buildReport() {
   const header = [
     '=== OBD-II Demo App – connection debug log ===',
     `Generated: ${new Date().toISOString()}`,

@@ -85,6 +85,8 @@ android/app/src/main/assets/index.android.bundle
 # Logs
 *.log
 logs/
+# ...except recording event logs, which are test fixtures
+!test/data/recordings/**/*.log
 
 # OS / editor
 Thumbs.db
