@@ -81,6 +81,18 @@ export async function startImu(
   };
 }
 
+/**
+ * Listen to the stream another screen started (Calibrate owns start/stop).
+ * Returns an unsubscribe; never stops the sensors.
+ */
+export function onImuBatch(cb: (b: ImuBatch) => void): () => void {
+  if (!emitter) {
+    return () => {};
+  }
+  const sub = emitter.addListener('imuBatch', e => cb(e as ImuBatch));
+  return () => sub.remove();
+}
+
 function need(): Native {
   if (!native) {
     throw new Error('ImuSensors native module not available');

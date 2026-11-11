@@ -11,11 +11,13 @@ import { dlog } from './debugLog';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import CalibrateScreen from './src/screens/CalibrateScreen';
 import ObdScreen from './src/screens/ObdScreen';
+import TrackScreen from './src/screens/TrackScreen';
 
 // Minimal tab shell; swap for @react-navigation once Track/Sessions/Maps land.
 // Every screen stays mounted and inactive ones are only hidden: the OBD
 // session and the sensor stream must survive switching tabs.
 const TABS = [
+  { key: 'track', label: 'Track', Screen: TrackScreen },
   { key: 'calibrate', label: 'Calibrate', Screen: CalibrateScreen },
   { key: 'obd', label: 'Vehicle (OBD)', Screen: ObdScreen },
 ] as const;
