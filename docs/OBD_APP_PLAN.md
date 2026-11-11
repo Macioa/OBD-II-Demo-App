@@ -209,7 +209,7 @@ Five screens on a bottom tab bar: **Track · Sessions · Calibrate · Maps · Se
 1. ✅ **M1 Sensors** — native SensorModule, live raw readout on Calibrate screen. *Done and tested on device (commit 832500c).*
 2. ✅ **M2 PDR** — step detect + heading → path on local grid; GPS recorded alongside. *Done (commit bb2cca6): `src/estimate/pdr.ts`, `src/geo/enu.ts`, Track tab, replay tests in `__tests__/pdr.test.ts`; tested on device and on the recorded drive. Screenshots in `docs/screenshots/m2/`. Walking-distance accuracy still to be checked with a walking recording.*
 3. ✅ **M3 Map** — MapLibre offline tiles, both paths + error HUD. *Done (commit ebc29b2, revision 9b88afe): Track map with GPS/estimate paths, per-second error lines, max/mean error, offline tile packs; revision added edge recentering with a 10 s pause after touch, a recenter lock, and a persistent OBD session (src/obd/session.ts) with reconnect and colour-coded states. Driving test plan in `docs/test-plans/m3-map.md`; screenshots in `docs/screenshots/m3/`. The driving estimate (OBD wheel speed) is still M5.*
-4. **M4 Sessions** — persist, list, replay, export GPX/CSV.
+4. ✅ **M4 Sessions** — persist, list, replay, export GPX/CSV. *Done (commit 63f0893): Sessions tab lists recordings and replays them through PDR (`src/session/replay.ts`) with map, scrubber, 1×/8×/32× playback and error stats; exports GPX (GPS + estimate tracks) and per-second error CSV via the share sheet, also kept in the session's `exports/` folder. Tests in `__tests__/replay.test.ts` and `__tests__/sessions.test.tsx`; verified on device.*
 5. **M5 INS + Wheel** — strapdown with ZUPT; OBD speed engine; comparison overlay.
 6. **M6 Polish** — calibration flows, drift chart, foreground service, battery tuning.
 
