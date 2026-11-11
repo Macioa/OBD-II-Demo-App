@@ -207,7 +207,7 @@ Five screens on a bottom tab bar: **Track · Sessions · Calibrate · Maps · Se
 ## 6. Milestones
 
 1. ✅ **M1 Sensors** — native SensorModule, live raw readout on Calibrate screen. *Done and tested on device (commit 832500c).*
-2. **M2 PDR** — step detect + heading → path on local grid; GPS recorded alongside.
+2. ✅ **M2 PDR** — step detect + heading → path on local grid; GPS recorded alongside. *Done (commit bb2cca6): `src/estimate/pdr.ts`, `src/geo/enu.ts`, Track tab, replay tests in `__tests__/pdr.test.ts`; tested on device and on the recorded drive. Screenshots in `docs/screenshots/m2/`. Walking-distance accuracy still to be checked with a walking recording.*
 3. **M3 Map** — MapLibre offline tiles, both paths + error HUD.
 4. **M4 Sessions** — persist, list, replay, export GPX/CSV.
 5. **M5 INS + Wheel** — strapdown with ZUPT; OBD speed engine; comparison overlay.
