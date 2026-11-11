@@ -1,97 +1,38 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Innova 3210RS Reader: GPS-free vehicle positioning on Android
 
-# Getting Started
+A React Native Android app that estimates where a car is **without GPS**. It reads wheel speed from the car over a Bluetooth OBD-II dongle (Innova 3210RS) and combines it with the phone's IMU. It shows the estimate next to GPS on an offline map, and replays every drive to measure the error.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/m5/01-replay-wheel.png" alt="Real drive replayed: Wheel estimate (green) against GPS (blue) with per-second error links"></td>
+<td width="50%"><img src="docs/screenshots/m3/12-obd-connecting.png" alt="Vehicle tab connecting to the OBD dongle over BLE"></td>
+</tr>
+<tr>
+<td><sub>A real 2.8 km drive replayed. The green Wheel estimate tracks the blue GPS path to 4.6 % final error.</sub></td>
+<td><sub>The in-vehicle hardware link: a persistent BLE session with visible states and auto-reconnect.</sub></td>
+</tr>
+</table>
 
-## Step 1: Start Metro
+## Overview
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+Positioning without GPS has to hold up in a real car: offline, on phone-grade sensors, and over a Bluetooth link to in-vehicle hardware that can drop at any time. A phone IMU on its own drifts by kilometres, so the only real test of an estimate is to drive with the app running and compare it against GPS.
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+The app covers the whole path from the car to the map. It talks to the dongle over BLE (ELM327 commands), captures native sensor data, and runs three position engines: step-based PDR, strapdown INS, and Wheel (OBD speed plus a learned heading axis). It draws an offline MapLibre map and replays any session with GPX/CSV export. It was built in small milestones, each one checked on the phone before the next started. AI coding agents wrote much of the code; the direction, review, and judging of results against real drives were done by hand.
 
-```sh
-# Using npm
-npm start
+Testing is built around **manual driving tests** and **live recorded car data**. From the map milestone onward, each milestone ended with a driving test plan run by hand. Every drive was recorded (100 Hz IMU, 1 Hz GPS, OBD speed), scrubbed of private data, committed, and replayed through the app's own code as test fixtures. The drives found the bugs that mattered, and none of the unit tests had caught them:
+- The OBD connection silently died after ~4 minutes; the drive log showed the dongle dropping the link. OBD now runs as a shared session with reconnect and visible state.
+- The map jumped on every GPS fix. It now recenters only near the edge and can be locked.
+- PDR counted 115 false steps in the car, which made an existing test fail on the new drive data. Steps are now ignored while OBD shows the car moving.
 
-# OR using Yarn
-yarn start
-```
+Each finding became a fix plus a regression test.
 
-## Step 2: Build and run your app
+On a real 2.79 km drive, Wheel finished at **4.6 % error** (mean 156 m), against 28 % for INS. OBD speed matched GPS to within 0.3 %, and live and replayed results agreed to under 1 m. The drive data also points to the next fix: a fixed ~19° heading offset caused by freezing the learned axis too early. There are 51 unit tests, many of them built on the recorded drives.
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+## Documents
 
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
-```
-
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+- [Install and Run](docs/INSTALL_AND_RUN.md): PC and phone setup, dev build or standalone APK, how to run a tracked drive, tests, and pulling data off the phone.
+- [Test Overview](docs/TEST_OVERVIEW.md): issues found by manual driving tests, results from the recorded drives and engine accuracy, and a unit test summary.
+- [App Evolution](docs/EVOLUTION.md): screenshots of the app growing from checking raw OBD and sensor input to the three-engine comparison, and how manual driving tests and live feedback reshaped each stage.
+- [How Data Is Pulled](docs/HOW_DATA_IS_PULLED.md): how the app talks to the dongle (BLE, ELM327 commands, PIDs).
+- [App Plan](docs/OBD_APP_PLAN.md): goals, architecture, milestones, and risks.
+- [Test data](test/README.md): live car data recorded on real drives (IMU, GPS, OBD logs), its format, and the scripts that remove private data before committing.
