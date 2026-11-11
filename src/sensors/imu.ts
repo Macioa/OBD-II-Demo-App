@@ -46,7 +46,12 @@ type Native = {
     extraLog: string,
   ): Promise<{ parts: number; mb: number }>;
   deleteRecording(id: string): Promise<boolean>;
+  loadRecording(id: string): Promise<RecordingFiles>;
+  shareExports(id: string, files: Record<string, string>): Promise<number>;
 };
+
+/** Raw session text for replay (imu holds only a/r rows). */
+export type RecordingFiles = { meta: string; gps: string; imu: string };
 
 const native = NativeModules.ImuSensors as Native | undefined;
 const emitter = native
@@ -107,6 +112,9 @@ export const listRecordings = () => need().listRecordings();
 export const shareRecording = (id: string, extraLog: string) =>
   need().shareRecording(id, extraLog);
 export const deleteRecording = (id: string) => need().deleteRecording(id);
+export const loadRecording = (id: string) => need().loadRecording(id);
+export const shareExports = (id: string, files: Record<string, string>) =>
+  need().shareExports(id, files);
 
 /** Append to the active recording's events.log; silently ignored when idle. */
 export function logEvent(msg: string) {

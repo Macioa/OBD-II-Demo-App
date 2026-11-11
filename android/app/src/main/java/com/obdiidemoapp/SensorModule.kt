@@ -286,6 +286,76 @@ class SensorModule(private val ctx: ReactApplicationContext) :
     }.start()
   }
 
+  /**
+   * M4 replay: reads a finished session for JS. Resolves {meta, gps, imu} as
+   * text; imu keeps only accel (a) and rotation (r) rows from every chunk,
+   * which is all the estimators need, to halve what crosses the bridge.
+   */
+  @ReactMethod
+  fun loadRecording(id: String, promise: Promise) {
+    Thread {
+      try {
+        val dir = File(SessionRecorder.root(ctx), id)
+        if (!SAFE_ID.matches(id) || !dir.isDirectory) throw IllegalArgumentException("No session $id")
+        val imu = StringBuilder("t,s,x,y,z,w\n")
+        dir.listFiles { f -> f.name.startsWith("imu_") }!!.sortedBy { it.name }.forEach { f ->
+          f.forEachLine { l ->
+            val c = l.indexOf(',')
+            if (c > 0 && c + 2 < l.length && l[c + 2] == ',' && (l[c + 1] == 'a' || l[c + 1] == 'r')) {
+              imu.append(l).append('\n')
+            }
+          }
+        }
+        fun read(n: String) = File(dir, n).takeIf { it.exists() }?.readText() ?: ""
+        promise.resolve(Arguments.createMap().apply {
+          putString("meta", read("meta.json"))
+          putString("gps", read("gps.csv"))
+          putString("imu", imu.toString())
+        })
+      } catch (e: Throwable) {
+        promise.reject("LOAD_FAILED", e.message, e)
+      }
+    }.start()
+  }
+
+  /**
+   * M4 export: writes [files] (name → text) into the session's exports/ folder
+   * and opens the share sheet with all of them attached.
+   */
+  @ReactMethod
+  fun shareExports(id: String, files: ReadableMap, promise: Promise) {
+    Thread {
+      try {
+        if (!SAFE_ID.matches(id)) throw IllegalArgumentException("Bad id $id")
+        val out = File(ctx.cacheDir, "debug/export").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
+        val keep = File(File(SessionRecorder.root(ctx), id), "exports").apply { mkdirs() }
+        val uris = ArrayList<android.net.Uri>()
+        val it = files.keySetIterator()
+        while (it.hasNextKey()) {
+          val name = it.nextKey()
+          if (!SAFE_FILE.matches(name)) throw IllegalArgumentException("Bad file name $name")
+          val text = files.getString(name) ?: ""
+          File(keep, name).writeText(text)
+          val f = File(out, name).apply { writeText(text) }
+          uris += FileProvider.getUriForFile(ctx, "${ctx.packageName}.debuglog", f)
+        }
+        val send = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+          type = "*/*"
+          putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+          putExtra(Intent.EXTRA_SUBJECT, "OBD App session $id export")
+          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(send, "Export session").apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        (ctx.currentActivity ?: ctx).startActivity(chooser)
+        promise.resolve(uris.size)
+      } catch (e: Throwable) {
+        promise.reject("EXPORT_FAILED", e.message, e)
+      }
+    }.start()
+  }
+
   @ReactMethod
   fun deleteRecording(id: String, promise: Promise) {
     handler.post {
@@ -430,6 +500,9 @@ class SensorModule(private val ctx: ReactApplicationContext) :
   companion object {
     const val BATCH_MS = 100L
     const val HEALTH_MS = 5000L
+    /** Session ids and export names from JS: no path separators or "..". */
+    val SAFE_ID = Regex("^rec-[0-9T-]+$")
+    val SAFE_FILE = Regex("^[A-Za-z0-9._-]+$")
     // minDelay is µs between samples; 0 means on-change only.
     fun maxHz(s: Sensor) = if (s.minDelay > 0) 1e6 / s.minDelay else 0.0
     val TYPES = listOf(

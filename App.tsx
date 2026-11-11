@@ -13,12 +13,14 @@ import CalibrateScreen from './src/screens/CalibrateScreen';
 import ObdScreen, { OBD_LOOK } from './src/screens/ObdScreen';
 import { useObd } from './src/obd/session';
 import TrackScreen from './src/screens/TrackScreen';
+import SessionsScreen from './src/screens/SessionsScreen';
 
 // Minimal tab shell; swap for @react-navigation once Track/Sessions/Maps land.
 // Every screen stays mounted and inactive ones are only hidden: the OBD
 // session and the sensor stream must survive switching tabs.
 const TABS = [
   { key: 'track', label: 'Track', Screen: TrackScreen },
+  { key: 'sessions', label: 'Sessions', Screen: SessionsScreen },
   { key: 'calibrate', label: 'Calibrate', Screen: CalibrateScreen },
   { key: 'obd', label: 'Vehicle (OBD)', Screen: ObdScreen },
 ] as const;
@@ -39,7 +41,7 @@ export default function App() {
       <SafeAreaView style={s.root}>
         {TABS.map(({ key, Screen }) => (
           <View key={key} style={[s.body, key !== tab && s.hidden]}>
-            <Screen />
+            <Screen active={key === tab} />
           </View>
         ))}
         <View style={s.bar}>
