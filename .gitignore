@@ -76,6 +76,9 @@ yarn-error.log
 
 # Generated JS bundle
 android/app/src/main/assets/index.android.bundle
+# Assets the bundler copies into res/ (--assets-dest)
+android/app/src/main/res/drawable-*/node_modules_*
+android/app/src/main/res/raw/keep.xml
 
 # Environment / secrets
 .env
