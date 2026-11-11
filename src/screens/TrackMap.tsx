@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   Camera,
+  CameraRef,
   GeoJSONSource,
   Layer,
   Map,
@@ -9,12 +10,16 @@ import {
 } from '@maplibre/maplibre-react-native';
 import { dlog } from '../../debugLog';
 import { EN } from '../geo/enu';
-import { Origin, boundsOf, toGeoJson } from '../geo/overlay';
+import { Origin, boundsOf, ll, nearEdge, toGeoJson } from '../geo/overlay';
 
 /** OpenStreetMap-derived vector tiles (OpenFreeMap), no API key. */
 export const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const OFFLINE_ZOOM = { min: 12, max: 17 };
 const OFFLINE_PAD_M = 1500;
+/** Recenter when the focus point is within this fraction of the edge. */
+export const EDGE_MARGIN = 0.15;
+/** A manual pan/zoom pauses recentering this long after the last touch. */
+export const TOUCH_PAUSE_MS = 10000;
 
 // Viewed tiles are kept for airplane mode even without a saved pack.
 OfflineManager.setMaximumAmbientCacheSize(200 * 1024 * 1024).catch(e =>
@@ -27,6 +32,8 @@ type Props = {
   gps: EN[];
   links: { a: EN; b: EN }[];
   cur: EN;
+  /** Point the map keeps on screen (latest GPS, or the estimate). */
+  focus: EN;
   showGps: boolean;
 };
 
@@ -37,9 +44,13 @@ export default function TrackMap({
   gps,
   links,
   cur,
+  focus,
   showGps,
 }: Props) {
-  const [follow, setFollow] = useState(true);
+  const cam = useRef<CameraRef>(null);
+  const view = useRef<[number, number, number, number] | null>(null);
+  const pausedUntil = useRef(0);
+  const [locked, setLocked] = useState(false);
   const [failed, setFailed] = useState(false);
   const [offline, setOffline] = useState<string | null>(null);
 
@@ -56,6 +67,25 @@ export default function TrackMap({
     },
   };
   const fit = boundsOf(origin, showGps ? [...est, ...gps] : est, 20);
+  const [initialFit] = useState(fit);
+
+  // R1: keep zoom, pan to the focus point when it nears the edge — unless
+  // locked or the user touched the map in the last TOUCH_PAUSE_MS.
+  const fe = focus.e;
+  const fn = focus.n;
+  useEffect(() => {
+    if (locked || Date.now() < pausedUntil.current || !view.current) {
+      return;
+    }
+    const pt = ll({ e: fe, n: fn }, origin);
+    if (nearEdge(pt, view.current, EDGE_MARGIN)) {
+      cam.current?.easeTo({ center: pt, duration: 400 });
+    }
+  }, [fe, fn, locked, origin]);
+
+  function fitTrip() {
+    cam.current?.fitBounds(fit, { padding: PAD, duration: 500 });
+  }
 
   async function saveOffline() {
     const bounds = boundsOf(origin, [...est, ...gps], OFFLINE_PAD_M);
@@ -96,9 +126,16 @@ export default function TrackMap({
         mapStyle={MAP_STYLE}
         attribution
         logo={false}
-        onRegionDidChange={e => {
+        onRegionIsChanging={e => {
           if (e.nativeEvent.userInteraction) {
-            setFollow(false);
+            pausedUntil.current = Date.now() + TOUCH_PAUSE_MS;
+          }
+        }}
+        onRegionDidChange={e => {
+          view.current = e.nativeEvent.bounds;
+          if (e.nativeEvent.userInteraction) {
+            pausedUntil.current = Date.now() + TOUCH_PAUSE_MS;
+            dlog('map: user moved map, recentering paused 10 s');
           }
         }}
         onDidFailLoadingMap={() => {
@@ -107,11 +144,10 @@ export default function TrackMap({
         }}
         onDidFinishLoadingMap={() => setFailed(false)}
       >
-        {follow ? (
-          <Camera bounds={fit} padding={PAD} duration={300} />
-        ) : (
-          <Camera />
-        )}
+        <Camera
+          ref={cam}
+          initialViewState={{ bounds: initialFit, padding: PAD }}
+        />
         <GeoJSONSource id="links" data={geo.links}>
           <Layer
             type="line"
@@ -161,11 +197,21 @@ export default function TrackMap({
         </Text>
       )}
       <View style={s.btns}>
-        {!follow && (
-          <Pressable style={s.btn} onPress={() => setFollow(true)}>
-            <Text>⌖ Fit</Text>
-          </Pressable>
-        )}
+        <Pressable testID="map-fit" style={s.btn} onPress={fitTrip}>
+          <Text>⌖ Fit</Text>
+        </Pressable>
+        <Pressable
+          testID="map-lock"
+          style={[s.btn, locked && s.btnOn]}
+          onPress={() => {
+            dlog(`map: recenter lock ${locked ? 'off' : 'on'}`);
+            setLocked(!locked);
+          }}
+        >
+          <Text style={locked ? s.btnOnTxt : undefined}>
+            {locked ? '🔒 Locked' : '🔓 Lock'}
+          </Text>
+        </Pressable>
         <Pressable
           style={s.btn}
           onPress={saveOffline}
@@ -207,4 +253,6 @@ const s = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.9)',
   },
+  btnOn: { backgroundColor: '#263238' },
+  btnOnTxt: { color: '#fff', fontWeight: '700' },
 });

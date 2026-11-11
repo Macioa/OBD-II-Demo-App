@@ -173,6 +173,7 @@ export default function TrackScreen() {
           gps={gps}
           links={links.filter((_, i) => i % 5 === 0)}
           cur={r.pdr}
+          focus={showGps && gps.length ? gps[gps.length - 1] : r.pdr}
           showGps={showGps}
         />
       ) : (

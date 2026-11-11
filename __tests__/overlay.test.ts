@@ -1,5 +1,5 @@
 import { fromEnu } from '../src/geo/enu';
-import { boundsOf, errorStats, toGeoJson } from '../src/geo/overlay';
+import { boundsOf, errorStats, nearEdge, toGeoJson } from '../src/geo/overlay';
 
 const O = { lat: 45, lon: -122 };
 
@@ -41,4 +41,13 @@ test('boundsOf: [w,s,e,n] with padding, always contains origin', () => {
   expect(s).toBeLessThan(O.lat);
   expect(e).toBeCloseTo(fromEnu(1100, 0, O.lat, O.lon).lon, 9);
   expect(n).toBeCloseTo(fromEnu(0, 600, O.lat, O.lon).lat, 9);
+});
+
+test('nearEdge: inside inner box vs within 15 % margin', () => {
+  const v: [number, number, number, number] = [0, 0, 10, 10];
+  expect(nearEdge([5, 5], v)).toBe(false);
+  expect(nearEdge([1.6, 8.4], v)).toBe(false);
+  expect(nearEdge([1, 5], v)).toBe(true); // west margin
+  expect(nearEdge([5, 9], v)).toBe(true); // north margin
+  expect(nearEdge([12, 5], v)).toBe(true); // off-screen
 });

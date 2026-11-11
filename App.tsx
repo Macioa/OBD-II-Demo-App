@@ -10,7 +10,8 @@ import {
 import { dlog } from './debugLog';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import CalibrateScreen from './src/screens/CalibrateScreen';
-import ObdScreen from './src/screens/ObdScreen';
+import ObdScreen, { OBD_LOOK } from './src/screens/ObdScreen';
+import { useObd } from './src/obd/session';
 import TrackScreen from './src/screens/TrackScreen';
 
 // Minimal tab shell; swap for @react-navigation once Track/Sessions/Maps land.
@@ -30,6 +31,8 @@ export default function App() {
     return () => sub.remove();
   }, []);
   useEffect(() => dlog(`tab ${tab}`), [tab]);
+  const obd = useObd();
+  const obdOn = obd.status !== 'idle';
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="dark-content" />
@@ -45,6 +48,17 @@ export default function App() {
               <Text style={[s.label, t.key === tab && s.active]}>
                 {t.label}
               </Text>
+              {t.key === 'obd' && obdOn && (
+                <Text
+                  testID="obd-badge"
+                  style={[s.badge, { color: OBD_LOOK[obd.status].color }]}
+                >
+                  ●{' '}
+                  {obd.status === 'reading'
+                    ? `${obd.live.kmh ?? '-'} km/h`
+                    : obd.status}
+                </Text>
+              )}
             </Pressable>
           ))}
         </View>
@@ -63,4 +77,5 @@ const s = StyleSheet.create({
   tab: { flex: 1, paddingVertical: 14, alignItems: 'center' },
   label: { color: '#555' },
   active: { color: '#000', fontWeight: '700' },
+  badge: { fontSize: 11, fontWeight: '700' },
 });

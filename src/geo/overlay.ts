@@ -42,7 +42,7 @@ export function errorStats(
   };
 }
 
-const ll = (p: EN, o: Origin): [number, number] => {
+export const ll = (p: EN, o: Origin): [number, number] => {
   const g = fromEnu(p.e, p.n, o.lat, o.lon);
   return [g.lon, g.lat];
 };
@@ -90,4 +90,19 @@ export function boundsOf(
   const sw = ll({ e: minE - padM, n: minN - padM }, o);
   const ne = ll({ e: maxE + padM, n: maxN + padM }, o);
   return [sw[0], sw[1], ne[0], ne[1]];
+}
+
+/**
+ * True when [lon, lat] lies outside the inner box of `view` ([w, s, e, n])
+ * left after trimming `margin` (fraction of width/height) off every side.
+ */
+export function nearEdge(
+  pt: [number, number],
+  view: [number, number, number, number],
+  margin = 0.15,
+) {
+  const [w, s, e, n] = view;
+  const dx = (e - w) * margin;
+  const dy = (n - s) * margin;
+  return pt[0] < w + dx || pt[0] > e - dx || pt[1] < s + dy || pt[1] > n - dy;
 }

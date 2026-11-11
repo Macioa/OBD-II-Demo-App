@@ -188,10 +188,18 @@ describe.each(recordings)('recording %s', name => {
     }
   });
 
+  // Under 10 m of GPS movement is GPS jitter on a phone that never moved.
+  const still = gpsDist < 10;
   test(
-    driving ? 'driving: few false steps' : 'walking: steps match GPS distance',
+    still
+      ? 'stationary: no steps'
+      : driving
+      ? 'driving: few false steps'
+      : 'walking: steps match GPS distance',
     () => {
-      if (driving) {
+      if (still) {
+        expect(pdr.steps.length).toBeLessThanOrEqual(2);
+      } else if (driving) {
         // Car vibration should not look like walking.
         expect(pdr.steps.length).toBeLessThan(
           rec.gps[rec.gps.length - 1].t / 4,
