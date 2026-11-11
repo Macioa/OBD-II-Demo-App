@@ -206,7 +206,7 @@ Five screens on a bottom tab bar: **Track · Sessions · Calibrate · Maps · Se
 
 ## 6. Milestones
 
-1. **M1 Sensors** — native SensorModule, live raw readout on Calibrate screen.
+1. ✅ **M1 Sensors** — native SensorModule, live raw readout on Calibrate screen. *Done and tested on device (commit 832500c).*
 2. **M2 PDR** — step detect + heading → path on local grid; GPS recorded alongside.
 3. **M3 Map** — MapLibre offline tiles, both paths + error HUD.
 4. **M4 Sessions** — persist, list, replay, export GPX/CSV.
